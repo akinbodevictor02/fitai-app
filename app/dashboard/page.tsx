@@ -12,6 +12,18 @@ import {
   ReferenceLine,
 } from "recharts";
 
+// ✅ ADD FIREBASE
+import {
+  addDoc,
+  collection,
+  serverTimestamp,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+
 export default function Dashboard() {
   const [weightHistory, setWeightHistory] = useState<any[]>([]);
   const [weightInput, setWeightInput] = useState("");
@@ -23,22 +35,43 @@ export default function Dashboard() {
   const [streak, setStreak] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
 
+  // ✅ FETCH FROM FIRESTORE INSTEAD OF LOCALSTORAGE
   useEffect(() => {
-    const savedWeights =
-      JSON.parse(localStorage.getItem("weightHistory") || "[]");
+    const loadData = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
 
-    const savedGoal =
-      localStorage.getItem("goalWeight") || "";
+      const q = query(
+        collection(db, "weights"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "asc")
+      );
 
-    const premium =
-      localStorage.getItem("isPremium") === "true";
+      const snapshot = await getDocs(q);
 
-    setWeightHistory(savedWeights);
-    setGoalWeight(savedGoal);
-    setIsPremium(premium);
+      const weights = snapshot.docs.map((doc) => {
+        const data: any = doc.data();
+        return {
+          date: data.createdAt?.toDate
+            ? data.createdAt.toDate().toISOString().split("T")[0]
+            : "N/A",
+          weight: data.weight,
+        };
+      });
 
-    calculateAnalytics(savedWeights);
-    generateWeeklyInsight(savedWeights);
+      setWeightHistory(weights);
+
+      const savedGoal = localStorage.getItem("goalWeight") || "";
+      const premium = localStorage.getItem("isPremium") === "true";
+
+      setGoalWeight(savedGoal);
+      setIsPremium(premium);
+
+      calculateAnalytics(weights);
+      generateWeeklyInsight(weights);
+    };
+
+    loadData();
   }, []);
 
   const calculateAnalytics = (data: any[]) => {
@@ -88,18 +121,41 @@ export default function Dashboard() {
     else setWeeklyInsight(`No change this week`);
   };
 
-  const handleAddWeight = () => {
+  // ✅ SAVE TO FIRESTORE INSTEAD OF LOCALSTORAGE
+  const handleAddWeight = async () => {
     if (!weightInput) return;
 
-    const newEntry = {
-      date: new Date().toISOString().split("T")[0],
-      weight: parseFloat(weightInput),
-    };
+    const user = auth.currentUser;
+    if (!user) return;
 
-    const updated = [...weightHistory, newEntry];
+    const newWeight = parseFloat(weightInput);
+
+    await addDoc(collection(db, "weights"), {
+      userId: user.uid,
+      weight: newWeight,
+      createdAt: serverTimestamp(),
+    });
+
+    // Reload data after save
+    const q = query(
+      collection(db, "weights"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "asc")
+    );
+
+    const snapshot = await getDocs(q);
+
+    const updated = snapshot.docs.map((doc) => {
+      const data: any = doc.data();
+      return {
+        date: data.createdAt?.toDate
+          ? data.createdAt.toDate().toISOString().split("T")[0]
+          : "N/A",
+        weight: data.weight,
+      };
+    });
 
     setWeightHistory(updated);
-    localStorage.setItem("weightHistory", JSON.stringify(updated));
     setWeightInput("");
 
     calculateAnalytics(updated);
