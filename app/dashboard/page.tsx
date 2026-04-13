@@ -12,16 +12,16 @@ import {
   ReferenceLine,
 } from "recharts";
 
-// ✅ ADD FIREBASE
 import {
   addDoc,
   collection,
   serverTimestamp,
   query,
   where,
-  getDocs,
   orderBy,
+  onSnapshot,
 } from "firebase/firestore";
+
 import { auth, db } from "@/lib/firebase";
 
 export default function Dashboard() {
@@ -35,10 +35,9 @@ export default function Dashboard() {
   const [streak, setStreak] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
 
-  // ✅ FETCH FROM FIRESTORE INSTEAD OF LOCALSTORAGE
+  // ✅ REAL-TIME + AUTH SAFE
   useEffect(() => {
-    const loadData = async () => {
-      const user = auth.currentUser;
+    const unsubscribeAuth = auth.onAuthStateChanged((user) => {
       if (!user) return;
 
       const q = query(
@@ -47,31 +46,32 @@ export default function Dashboard() {
         orderBy("createdAt", "asc")
       );
 
-      const snapshot = await getDocs(q);
+      const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+        const weights = snapshot.docs.map((doc) => {
+          const data: any = doc.data();
+          return {
+            date: data.createdAt?.toDate
+              ? data.createdAt.toDate().toISOString().split("T")[0]
+              : "N/A",
+            weight: data.weight,
+          };
+        });
 
-      const weights = snapshot.docs.map((doc) => {
-        const data: any = doc.data();
-        return {
-          date: data.createdAt?.toDate
-            ? data.createdAt.toDate().toISOString().split("T")[0]
-            : "N/A",
-          weight: data.weight,
-        };
+        setWeightHistory(weights);
+        calculateAnalytics(weights);
+        generateWeeklyInsight(weights);
       });
 
-      setWeightHistory(weights);
+      return () => unsubscribeSnapshot();
+    });
 
-      const savedGoal = localStorage.getItem("goalWeight") || "";
-      const premium = localStorage.getItem("isPremium") === "true";
+    const savedGoal = localStorage.getItem("goalWeight") || "";
+    const premium = localStorage.getItem("isPremium") === "true";
 
-      setGoalWeight(savedGoal);
-      setIsPremium(premium);
+    setGoalWeight(savedGoal);
+    setIsPremium(premium);
 
-      calculateAnalytics(weights);
-      generateWeeklyInsight(weights);
-    };
-
-    loadData();
+    return () => unsubscribeAuth();
   }, []);
 
   const calculateAnalytics = (data: any[]) => {
@@ -121,7 +121,7 @@ export default function Dashboard() {
     else setWeeklyInsight(`No change this week`);
   };
 
-  // ✅ SAVE TO FIRESTORE INSTEAD OF LOCALSTORAGE
+  // ✅ SAVE (NO REFETCH NEEDED)
   const handleAddWeight = async () => {
     if (!weightInput) return;
 
@@ -136,30 +136,7 @@ export default function Dashboard() {
       createdAt: serverTimestamp(),
     });
 
-    // Reload data after save
-    const q = query(
-      collection(db, "weights"),
-      where("userId", "==", user.uid),
-      orderBy("createdAt", "asc")
-    );
-
-    const snapshot = await getDocs(q);
-
-    const updated = snapshot.docs.map((doc) => {
-      const data: any = doc.data();
-      return {
-        date: data.createdAt?.toDate
-          ? data.createdAt.toDate().toISOString().split("T")[0]
-          : "N/A",
-        weight: data.weight,
-      };
-    });
-
-    setWeightHistory(updated);
     setWeightInput("");
-
-    calculateAnalytics(updated);
-    generateWeeklyInsight(updated);
   };
 
   const handleUpgrade = () => {
@@ -169,7 +146,6 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 text-white">
-
       {isPremium ? (
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="card p-4 text-center">

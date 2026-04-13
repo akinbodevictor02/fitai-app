@@ -7,43 +7,52 @@ export default function GeneratePlan() {
   const [age, setAge] = useState("");
   const [goal, setGoal] = useState("");
   const [plan, setPlan] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!age || !goal) {
       alert("Fill all fields");
       return;
     }
 
-    const newPlan = `
-Workout Plan for ${goal} (Age: ${age})
+    setLoading(true);
+    setPlan("");
 
-Day 1: Push-ups, Squats
-Day 2: Running, Plank
-Day 3: Rest
-    `;
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        body: JSON.stringify({ age, goal }),
+      });
 
-    setPlan(newPlan);
+      const data = await res.json();
 
-    const existing = JSON.parse(localStorage.getItem("plans") || "[]");
+      setPlan(data.result);
 
-    localStorage.setItem(
-      "plans",
-      JSON.stringify([
-        ...existing,
-        {
-          id: Date.now(),
-          age,
-          goal,
-          plan: newPlan,
-          date: new Date().toLocaleString(),
-        },
-      ])
-    );
+      // ✅ Save to localStorage
+      const existing = JSON.parse(localStorage.getItem("plans") || "[]");
+
+      localStorage.setItem(
+        "plans",
+        JSON.stringify([
+          ...existing,
+          {
+            id: Date.now(),
+            age,
+            goal,
+            plan: data.result,
+            date: new Date().toLocaleString(),
+          },
+        ])
+      );
+    } catch (error) {
+      setPlan("Error generating plan");
+    }
+
+    setLoading(false);
   };
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
-
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
@@ -70,10 +79,14 @@ Day 3: Rest
             <option value="">Select goal</option>
             <option value="Lose Weight">Lose weight</option>
             <option value="Gain Muscle">Gain muscle</option>
+            <option value="Stay Fit">Stay fit</option>
           </select>
 
-          <button onClick={handleGenerate} className="btn w-full py-3">
-            Generate
+          <button
+            onClick={handleGenerate}
+            className="btn w-full py-3"
+          >
+            {loading ? "Generating..." : "Generate"}
           </button>
         </div>
 
