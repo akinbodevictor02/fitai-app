@@ -9,47 +9,55 @@ export default function GeneratePlan() {
   const [plan, setPlan] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleGenerate = async () => {
-    if (!age || !goal) {
-      alert("Fill all fields");
+const handleGenerate = async () => {
+  if (!age || !goal) {
+    alert("Fill all fields");
+    return;
+  }
+
+  setLoading(true);
+  setPlan("");
+
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      body: JSON.stringify({ age, goal }),
+    });
+
+    const data = await res.json();
+
+    console.log("API RESPONSE:", data); // 👈 DEBUG
+
+    if (!res.ok) {
+      setPlan(data.error || "Something went wrong");
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setPlan("");
+    setPlan(data.plan);
 
-    try {
-      const res = await fetch("/api/generate", {
-        method: "POST",
-        body: JSON.stringify({ age, goal }),
-      });
+    // Save to localStorage
+    const existing = JSON.parse(localStorage.getItem("plans") || "[]");
 
-      const data = await res.json();
+    localStorage.setItem(
+      "plans",
+      JSON.stringify([
+        ...existing,
+        {
+          id: Date.now(),
+          age,
+          goal,
+          plan: data.plan,
+          date: new Date().toLocaleString(),
+        },
+      ])
+    );
+  } catch (error) {
+    setPlan("Error connecting to server");
+  }
 
-      setPlan(data.result);
-
-      // ✅ Save to localStorage
-      const existing = JSON.parse(localStorage.getItem("plans") || "[]");
-
-      localStorage.setItem(
-        "plans",
-        JSON.stringify([
-          ...existing,
-          {
-            id: Date.now(),
-            age,
-            goal,
-            plan: data.result,
-            date: new Date().toLocaleString(),
-          },
-        ])
-      );
-    } catch (error) {
-      setPlan("Error generating plan");
-    }
-
-    setLoading(false);
-  };
+  setLoading(false);
+};
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4">
