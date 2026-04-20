@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-export const runtime = "nodejs"; // ✅ REQUIRED
+export const runtime = "nodejs";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -10,60 +10,46 @@ export async function POST(req: Request) {
   try {
     const { age, goal } = await req.json();
 
-    if (!age || !goal) {
-      return Response.json(
-        { error: "Missing age or goal" },
-        { status: 400 }
-      );
-    }
-
     const prompt = `
 Create a simple 7-day workout plan.
 
-User details:
-- Age: ${age}
-- Goal: ${goal}
-
-Make it:
-- Beginner friendly
-- Day-by-day structured
-- Clear and practical
-- Short but useful
+Age: ${age}
+Goal: ${goal}
 `;
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini", // ✅ safe model
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
     });
-
-    console.log("OPENAI RESPONSE:", response);
 
     const plan = response?.choices?.[0]?.message?.content;
 
-    if (!plan) {
-      return Response.json(
-        { error: "AI returned empty response" },
-        { status: 500 }
-      );
-    }
-
-    return Response.json({ plan });
+    return Response.json({
+      plan: plan || "Default plan fallback",
+    });
 
   } catch (error: any) {
-  if (error?.status === 429) {
+    console.error("ERROR:", error);
+
+    // ✅ HANDLE OPENAI FAILURE HERE
+    if (error?.status === 429) {
+      return Response.json({
+        plan: `⚠️ AI temporarily unavailable.
+
+Here’s a sample plan:
+
+Day 1: Full body workout  
+Day 2: Cardio  
+Day 3: Rest  
+Day 4: Upper body  
+Day 5: Lower body  
+Day 6: Cardio  
+Day 7: Rest`,
+      });
+    }
+
     return Response.json({
-      plan: "⚠️ AI temporarily unavailable. Here's a sample plan:\n\nDay 1: Upper body\nDay 2: Cardio\nDay 3: Rest\n..."
+      plan: "Something went wrong. Try again later.",
     });
   }
-
-  return Response.json(
-    { error: error.message || "OpenAI failed" },
-    { status: 500 }
-  );
-}
 }
